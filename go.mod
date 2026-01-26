@@ -1,10 +1,11 @@
 module github.com/openimsdk/gomake
 
-go 1.21.2
+go 1.24.0
 
 require (
 	github.com/magefile/mage v1.15.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
+	golang.org/x/sys v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -14,5 +15,4 @@ require (
 	github.com/tklauser/go-sysconf v0.3.13 // indirect
 	github.com/tklauser/numcpus v0.7.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/sys v0.19.0 // indirect
 )

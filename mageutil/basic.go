@@ -9,8 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/magefile/mage/sh"
 )
 
 // CheckAndReportBinariesStatus checks the running status of all binary files and reports it.
@@ -294,17 +292,21 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	} else if cpuNum > runtime.NumCPU() {
 		cpuNum = runtime.NumCPU()
 	}
-	const compilationUsage = 16
-	cpuNum = cpuNum / compilationUsage
-	if cpuNum%compilationUsage != 0 {
-		cpuNum++
-	}
-	if cpuNum < 1 {
-		cpuNum = 1
-	}
+
+	////获取环境变量控制的最大并发数
+	//maxConcurrency := os.Getenv("MAX_CONCURRENCY")
+	//if maxConcurrency != "" {
+	//	if maxConcurrent, err := strconv.Atoi(maxConcurrency); err == nil && maxConcurrent > 0 {
+	//		cpuNum = maxConcurrent
+	//		if len(compileBinaries) < cpuNum {
+	//			cpuNum = len(compileBinaries)
+	//		}
+	//	}
+	//} else {
 	if len(compileBinaries) < cpuNum {
 		cpuNum = len(compileBinaries)
 	}
+
 	PrintGreen(fmt.Sprintf("The number of concurrent compilations is %d", cpuNum))
 	task := make(chan int, cpuNum)
 	go func() {
@@ -391,7 +393,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 				// PrintBlue(fmt.Sprintf("DEBUG: goModDir = '%s'", goModDir))
 				// PrintBlue(fmt.Sprintf("DEBUG: path = '%s'", path))
 
-				err = sh.RunWith(env, "go", "build", "-o", outputPath, buildTarget)
+				err = RunWithPriority(PriorityLow, env, "go", "build", "-o", outputPath, buildTarget)
 
 				os.Chdir(originalDir)
 
