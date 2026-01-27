@@ -308,8 +308,8 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	if len(compileBinaries) < cpuNum {
 		concurrency = len(compileBinaries)
 	}
-	if cpuNum/2 < concurrency {
-		concurrency = cpuNum / 2
+	if cpuNum/16 < concurrency {
+		concurrency = cpuNum / 16
 	}
 	if concurrency <= 0 {
 		concurrency = 1
