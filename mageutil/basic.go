@@ -422,7 +422,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 func Build(binaries []string, pathOpts *PathOptions) {
 	if _, err := os.Stat(StartConfigFile); err == nil {
 		InitForSSC()
-		KillExistBinaries()
+		//KillExistBinaries()
 	}
 
 	if pathOpts != nil {
