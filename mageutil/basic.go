@@ -308,8 +308,8 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	if len(compileBinaries) < cpuNum {
 		concurrency = len(compileBinaries)
 	}
-	if cpuNum/16 < concurrency {
-		concurrency = cpuNum / 16
+	if cpuNum/2 < concurrency {
+		concurrency = cpuNum / 2
 	}
 	if concurrency <= 0 {
 		concurrency = 1
@@ -327,8 +327,13 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	res := make(chan string, 1)
 	running := int64(concurrency)
 
+	maxProc := concurrency / 2
+	if maxProc <= 0 {
+		maxProc = 1
+	}
+
 	env := map[string]string{
-		"GOMAXPROCS":  strconv.Itoa(1),
+		"GOMAXPROCS":  strconv.Itoa(maxProc),
 		"GOOS":        targetOS,
 		"GOARCH":      targetArch,
 		"CGO_ENABLED": cgoEnabled,
