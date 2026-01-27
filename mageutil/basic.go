@@ -294,22 +294,12 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 		cpuNum = runtime.NumCPU()
 	}
 
-	////获取环境变量控制的最大并发数
-	//maxConcurrency := os.Getenv("MAX_CONCURRENCY")
-	//if maxConcurrency != "" {
-	//	if maxConcurrent, err := strconv.Atoi(maxConcurrency); err == nil && maxConcurrent > 0 {
-	//		cpuNum = maxConcurrent
-	//		if len(compileBinaries) < cpuNum {
-	//			cpuNum = len(compileBinaries)
-	//		}
-	//	}
-	//} else {
 	concurrency := cpuNum
 	if len(compileBinaries) < cpuNum {
 		concurrency = len(compileBinaries)
 	}
-	if cpuNum/2 < concurrency {
-		concurrency = cpuNum / 2
+	if cpuNum/4 < concurrency {
+		concurrency = cpuNum / 4
 	}
 	if concurrency <= 0 {
 		concurrency = 1
@@ -327,13 +317,13 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	res := make(chan string, 1)
 	running := int64(concurrency)
 
-	maxProc := concurrency / 2
-	if maxProc <= 0 {
-		maxProc = 1
+	goMaxProcs := (cpuNum - 2) / concurrency
+	if goMaxProcs <= 0 {
+		goMaxProcs = 1
 	}
 
 	env := map[string]string{
-		"GOMAXPROCS":  strconv.Itoa(maxProc),
+		"GOMAXPROCS":  strconv.Itoa(goMaxProcs),
 		"GOOS":        targetOS,
 		"GOARCH":      targetArch,
 		"CGO_ENABLED": cgoEnabled,
