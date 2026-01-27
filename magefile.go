@@ -6,11 +6,49 @@ package main
 import (
 	"flag"
 	"os"
+	"path/filepath"
 
 	"github.com/openimsdk/gomake/mageutil"
 )
 
-var Default = Build
+var Default = DefaultTarget
+
+func DefaultTarget() {
+	if shouldUseLauncherDefault() {
+		Start()
+		return
+	}
+	Build()
+}
+
+func shouldUseLauncherDefault() bool {
+	if dirExists(filepath.Join(".", mageutil.SrcDir)) || dirExists(filepath.Join(".", mageutil.ToolsDir)) {
+		return false
+	}
+	if !fileExists(filepath.Join(".", mageutil.StartConfigFile)) {
+		return false
+	}
+	if dirExists(filepath.Join(".", mageutil.BinDir, mageutil.PlatformsDir)) {
+		return true
+	}
+	return dirExists(filepath.Join(".", mageutil.OutputDir, mageutil.BinDir, mageutil.PlatformsDir))
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
+}
 
 var Aliases = map[string]any{
 	"buildcc": BuildWithCustomConfig,

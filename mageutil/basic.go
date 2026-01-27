@@ -303,12 +303,16 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	//		}
 	//	}
 	//} else {
+	concurrency := cpuNum
 	if len(compileBinaries) < cpuNum {
-		cpuNum = len(compileBinaries)
+		concurrency = len(compileBinaries)
+	}
+	if concurrency > cpuNum-2 {
+		concurrency = cpuNum - 2
 	}
 
-	PrintGreen(fmt.Sprintf("The number of concurrent compilations is %d", cpuNum))
-	task := make(chan int, cpuNum)
+	PrintGreen(fmt.Sprintf("The number of concurrent compilations is %d", concurrency))
+	task := make(chan int, concurrency)
 	go func() {
 		for i := range compileBinaries {
 			task <- i
@@ -317,7 +321,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	}()
 
 	res := make(chan string, 1)
-	running := int64(cpuNum)
+	running := int64(concurrency)
 
 	env := map[string]string{
 		"GOOS":        targetOS,
@@ -334,7 +338,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 		os.Exit(1)
 	}
 
-	for i := 0; i < cpuNum; i++ {
+	for i := 0; i < concurrency; i++ {
 		go func() {
 			defer func() {
 				if atomic.AddInt64(&running, -1) == 0 {
