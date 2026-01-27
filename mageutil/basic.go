@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -307,8 +308,8 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	if len(compileBinaries) < cpuNum {
 		concurrency = len(compileBinaries)
 	}
-	if cpuNum/16 < concurrency {
-		concurrency = cpuNum / 16
+	if cpuNum-2 < concurrency {
+		concurrency = cpuNum - 2
 	}
 	if concurrency <= 0 {
 		concurrency = 1
@@ -327,6 +328,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	running := int64(concurrency)
 
 	env := map[string]string{
+		"GOMAXPROCS":  strconv.Itoa(1),
 		"GOOS":        targetOS,
 		"GOARCH":      targetArch,
 		"CGO_ENABLED": cgoEnabled,
