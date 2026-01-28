@@ -34,108 +34,125 @@ func resolveBuildMemOptions(opts *PathOptions) buildMemOptions {
 	return memOpts
 }
 
-func formatBytes(bytes uint64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%dB", bytes)
-	}
-	div, exp := uint64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	value := float64(bytes) / float64(div)
-	suffixes := []string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
-	if exp >= len(suffixes) {
-		exp = len(suffixes) - 1
-	}
-	return fmt.Sprintf("%.2f%s", value, suffixes[exp])
-}
-
 type buildLimits struct {
-	concurrency int
-	goMaxProcs  int
-	available   uint64
-	memOpts     buildMemOptions
+	concurrency   int
+	goMaxProcs    int
+	availableMem  uint64
+	availableDisk uint64
+	tempInMemory  bool
+	memOpts       buildMemOptions
 }
 
 func calculateBuildLimits(compileCount int, memOpts buildMemOptions) (buildLimits, error) {
-	cpuNum := runtime.GOMAXPROCS(0)
-	if cpuNum <= 0 {
-		cpuNum = runtime.NumCPU()
-	} else if cpuNum > runtime.NumCPU() {
-		cpuNum = runtime.NumCPU()
-	}
-
-	if cpuNum < 1 {
-		cpuNum = 1
-	}
-
-	cpuConcurrency := cpuNum
-	if compileCount < cpuNum {
-		cpuConcurrency = compileCount
-	}
-	if cpuConcurrency <= 0 {
-		cpuConcurrency = 1
-	}
-
 	if memOpts.buildTaskMemBytes == 0 || memOpts.buildThreadMemBytes == 0 {
-		return buildLimits{memOpts: memOpts}, fmt.Errorf("invalid memory thresholds: buildTaskMem=%d, buildThreadMem=%d", memOpts.buildTaskMemBytes, memOpts.buildThreadMemBytes)
+		return buildLimits{memOpts: memOpts},
+			fmt.Errorf("invalid memory thresholds: task=%d, thread=%d",
+				memOpts.buildTaskMemBytes, memOpts.buildThreadMemBytes)
 	}
+
+	cpuNum := clamp(runtime.GOMAXPROCS(0), 1, runtime.NumCPU())
+	cpuConcurrency := clamp(compileCount, 1, cpuNum)
 
 	vm, err := mem.VirtualMemory()
 	if err != nil {
-		return buildLimits{memOpts: memOpts}, fmt.Errorf("failed to read system memory: %w", err)
+		return buildLimits{memOpts: memOpts}, fmt.Errorf("read system memory: %w", err)
 	}
 
-	availableMem := vm.Available
-	minRequired := memOpts.buildTaskMemBytes + memOpts.buildThreadMemBytes
-	if availableMem < minRequired {
-		return buildLimits{available: availableMem, memOpts: memOpts}, insufficientMemoryErr(availableMem, memOpts)
+	tempRoot := resolveGoBuildTempRoot()
+	tempInfo := resolveTempStorageInfo(tempRoot)
+
+	taskBudget := vm.Available
+	if !tempInfo.inMemory {
+		taskBudget = tempInfo.availableDisk
+	}
+	threadBudget := vm.Available
+
+	limits := buildLimits{
+		availableMem:  vm.Available,
+		availableDisk: tempInfo.availableDisk,
+		tempInMemory:  tempInfo.inMemory,
+		memOpts:       memOpts,
 	}
 
-	maxConcurrency := cpuConcurrency
-	maxByTask := int(availableMem / memOpts.buildTaskMemBytes)
-	if maxByTask < maxConcurrency {
-		maxConcurrency = maxByTask
+	// 基础可行性检查
+	if !hasMinimumResources(taskBudget, threadBudget, memOpts, tempInfo.inMemory) {
+		return limits, insufficientResourcesErr(
+			vm.Available, tempInfo.availableDisk, memOpts, tempInfo.inMemory)
 	}
 
-	for t := maxConcurrency; t >= 1; t-- {
-		pCPU := cpuNum / t
-		if pCPU < 1 {
-			pCPU = 1
-		}
-		perTask := availableMem / uint64(t)
-		if perTask <= memOpts.buildTaskMemBytes {
+	maxTasks := min(cpuConcurrency, int(taskBudget/memOpts.buildTaskMemBytes))
+	if maxTasks < 1 {
+		maxTasks = 1
+	}
+
+	bestUse := 0
+	bestFound := false
+
+	for t := maxTasks; t >= 1; t-- {
+		pCPU := max(1, cpuNum/t)
+		pMem := maxThreadsPerTask(
+			t, taskBudget, threadBudget, memOpts, tempInfo.inMemory,
+		)
+
+		p := min(pCPU, pMem)
+		if p < 1 {
 			continue
 		}
-		threadBudget := perTask - memOpts.buildTaskMemBytes
-		pMem := int(threadBudget / memOpts.buildThreadMemBytes)
-		if pMem < 1 {
-			continue
+
+		total := t * p
+		if total == cpuNum {
+			limits.concurrency = t
+			limits.goMaxProcs = p
+			return limits, nil
 		}
 
-		p := pMem
-		if p > pCPU {
-			p = pCPU
+		if !bestFound || total > bestUse || (total == bestUse && t > limits.concurrency) {
+			bestFound = true
+			bestUse = total
+			limits.concurrency = t
+			limits.goMaxProcs = p
 		}
-
-		return buildLimits{
-			concurrency: t,
-			goMaxProcs:  p,
-			available:   availableMem,
-			memOpts:     memOpts,
-		}, nil
 	}
 
-	return buildLimits{available: availableMem, memOpts: memOpts}, insufficientMemoryErr(availableMem, memOpts)
+	if bestFound {
+		return limits, nil
+	}
+	return limits, insufficientResourcesErr(
+		vm.Available, tempInfo.availableDisk, memOpts, tempInfo.inMemory)
 }
 
-func insufficientMemoryErr(availableBytes uint64, memOpts buildMemOptions) error {
+func insufficientResourcesErr(availableMem, availableDisk uint64, memOpts buildMemOptions, tempInMemory bool) error {
 	return fmt.Errorf(
-		"insufficient available memory: available=%s, buildTaskMem=%s, buildThreadMem=%s",
-		formatBytes(availableBytes),
+		"insufficient available resources: tempInMemory=%t,diskAvailable=%s, memAvailable=%s, buildTaskMem=%s, buildThreadMem=%s",
+		tempInMemory,
+		formatBytes(availableDisk),
+		formatBytes(availableMem),
 		formatBytes(memOpts.buildTaskMemBytes),
 		formatBytes(memOpts.buildThreadMemBytes),
 	)
+}
+
+func hasMinimumResources(taskBudget uint64, threadBudget uint64, memOpts buildMemOptions, inMemory bool) bool {
+	if inMemory {
+		return taskBudget >= memOpts.buildTaskMemBytes+memOpts.buildThreadMemBytes
+	}
+
+	return taskBudget >= memOpts.buildTaskMemBytes && threadBudget >= memOpts.buildThreadMemBytes
+}
+
+func maxThreadsPerTask(t int, taskBudget, threadBudget uint64, memOpts buildMemOptions, inMemory bool) int {
+	if inMemory {
+		perTask := taskBudget / uint64(t)
+		if perTask <= memOpts.buildTaskMemBytes {
+			return 0
+		}
+		return int((perTask - memOpts.buildTaskMemBytes) / memOpts.buildThreadMemBytes)
+	}
+
+	perTaskDisk := taskBudget / uint64(t)
+	if perTaskDisk < memOpts.buildTaskMemBytes {
+		return 0
+	}
+	perTaskMem := threadBudget / uint64(t)
+	return int(perTaskMem / memOpts.buildThreadMemBytes)
 }

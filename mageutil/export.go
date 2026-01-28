@@ -8,9 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"sync"
 )
 
 func ExportMageLauncherArchived(otherPaths ...string) error {
@@ -31,45 +29,13 @@ func ExportMageLauncherArchived(otherPaths ...string) error {
 		return fmt.Errorf("no platforms specified for export")
 	}
 
-	maxParallel := runtime.GOMAXPROCS(0)
-	if maxParallel <= 0 {
-		maxParallel = runtime.NumCPU()
-	} else if maxParallel > runtime.NumCPU() {
-		maxParallel = runtime.NumCPU()
-	}
-
-	if maxParallel > len(platformList) {
-		maxParallel = len(platformList)
-	}
-
-	sem := make(chan struct{}, maxParallel)
-	errCh := make(chan error, len(platformList))
-	var wg sync.WaitGroup
-
 	for _, platform := range platformList {
-		platform := platform
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			platformParts := strings.Split(platform, "_")
-			if len(platformParts) != 2 {
-				errCh <- fmt.Errorf("invalid platform format: %s", platform)
-				return
-			}
-			targetOS, targetArch := platformParts[0], platformParts[1]
-			if err := exportMageLauncherArchivedForPlatform(targetOS, targetArch, otherPaths); err != nil {
-				errCh <- err
-			}
-		}()
-	}
-
-	wg.Wait()
-	close(errCh)
-
-	for err := range errCh {
-		if err != nil {
+		platformParts := strings.Split(platform, "_")
+		if len(platformParts) != 2 {
+			return fmt.Errorf("invalid platform format: %s", platform)
+		}
+		targetOS, targetArch := platformParts[0], platformParts[1]
+		if err := exportMageLauncherArchivedForPlatform(targetOS, targetArch, otherPaths); err != nil {
 			return err
 		}
 	}

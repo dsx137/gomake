@@ -261,6 +261,23 @@ func getMainFile(binaryPath string) (string, error) {
 	return retPath, nil
 }
 
+func applyEnvOverride(keys []string, desc string, target *int) {
+	for _, key := range keys {
+		raw := strings.TrimSpace(os.Getenv(key))
+		if raw == "" {
+			continue
+		}
+		value, err := strconv.Atoi(raw)
+		if err != nil || value <= 0 {
+			PrintYellow(fmt.Sprintf("Invalid %s %s=%q, ignoring", desc, key, raw))
+			return
+		}
+		*target = value
+		PrintBlue(fmt.Sprintf("Using %s override %s=%d", desc, key, value))
+		return
+	}
+}
+
 func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compileBinaries []string, memOpts buildMemOptions) []string {
 	// PrintBlue("=== compileDir called ===")
 	// PrintBlue(fmt.Sprintf("sourceDir: %s", sourceDir))
@@ -296,13 +313,26 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	concurrency := limits.concurrency
 	goMaxProcs := limits.goMaxProcs
 
+	applyEnvOverride([]string{"taskconcurrency", "TASKCONCURRENCY"}, "task concurrency", &concurrency)
+	applyEnvOverride([]string{"taskgomaxprocs", "TASKGOMAXPROCS"}, "task GOMAXPROCS", &goMaxProcs)
+
 	PrintGreen(fmt.Sprintf("Concurrent compilations: %d, GOMAXPROCS per build: %d", concurrency, goMaxProcs))
-	PrintGreen(fmt.Sprintf(
-		"Memory limit: available=%s, buildTaskMem=%s, buildThreadMem=%s",
-		formatBytes(limits.available),
-		formatBytes(limits.memOpts.buildTaskMemBytes),
-		formatBytes(limits.memOpts.buildThreadMemBytes),
-	))
+	if limits.tempInMemory {
+		PrintGreen(fmt.Sprintf(
+			"Resource limit: tmpfs=true, memAvailable=%s, buildTaskMem=%s, buildThreadMem=%s",
+			formatBytes(limits.availableMem),
+			formatBytes(limits.memOpts.buildTaskMemBytes),
+			formatBytes(limits.memOpts.buildThreadMemBytes),
+		))
+	} else {
+		PrintGreen(fmt.Sprintf(
+			"Resource limit: tmpfs=false, diskAvailable=%s, memAvailable=%s, buildTaskMem=%s, buildThreadMem=%s",
+			formatBytes(limits.availableDisk),
+			formatBytes(limits.availableMem),
+			formatBytes(limits.memOpts.buildTaskMemBytes),
+			formatBytes(limits.memOpts.buildThreadMemBytes),
+		))
+	}
 
 	task := make(chan int, concurrency)
 	go func() {
