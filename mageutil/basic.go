@@ -298,11 +298,11 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	if len(compileBinaries) < cpuNum {
 		concurrency = len(compileBinaries)
 	}
-	if cpuNum/4 < concurrency {
-		concurrency = cpuNum / 4
+	if cpuNum < concurrency {
+		concurrency = cpuNum
 	}
-	if concurrency <= 1 {
-		concurrency = 2
+	if concurrency <= 0 {
+		concurrency = 1
 	}
 
 	PrintGreen(fmt.Sprintf("The number of concurrent compilations is %d", concurrency))
@@ -317,7 +317,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	res := make(chan string, 1)
 	running := int64(concurrency)
 
-	goMaxProcs := (cpuNum - 2) / concurrency
+	goMaxProcs := cpuNum / concurrency
 	if goMaxProcs <= 0 {
 		goMaxProcs = 1
 	}
