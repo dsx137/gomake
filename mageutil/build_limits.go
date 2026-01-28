@@ -34,32 +34,6 @@ func resolveBuildMemOptions(opts *PathOptions) buildMemOptions {
 	return memOpts
 }
 
-func memoryLimits(memOpts buildMemOptions) (concurrency int, goMaxProcs int, availableBytes uint64, err error) {
-	if memOpts.buildTaskMemBytes == 0 || memOpts.buildThreadMemBytes == 0 {
-		return 0, 0, 0, fmt.Errorf("invalid memory thresholds: buildTaskMem=%d, buildThreadMem=%d", memOpts.buildTaskMemBytes, memOpts.buildThreadMemBytes)
-	}
-
-	vm, err := mem.VirtualMemory()
-	if err != nil {
-		return 0, 0, 0, fmt.Errorf("failed to read system memory: %w", err)
-	}
-
-	availableBytes = vm.Available
-	concurrency = int(availableBytes / memOpts.buildTaskMemBytes)
-	goMaxProcs = int(availableBytes / memOpts.buildThreadMemBytes)
-
-	if concurrency < 1 || goMaxProcs < 1 {
-		return concurrency, goMaxProcs, availableBytes, fmt.Errorf(
-			"insufficient available memory: available=%s, buildTaskMem=%s, buildThreadMem=%s",
-			formatBytes(availableBytes),
-			formatBytes(memOpts.buildTaskMemBytes),
-			formatBytes(memOpts.buildThreadMemBytes),
-		)
-	}
-
-	return concurrency, goMaxProcs, availableBytes, nil
-}
-
 func formatBytes(bytes uint64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -93,6 +67,10 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions) (buildLimit
 		cpuNum = runtime.NumCPU()
 	}
 
+	if cpuNum < 1 {
+		cpuNum = 1
+	}
+
 	cpuConcurrency := cpuNum
 	if compileCount < cpuNum {
 		cpuConcurrency = compileCount
@@ -104,42 +82,66 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions) (buildLimit
 		cpuConcurrency = 1
 	}
 
-	cpuGoMaxProcs := cpuNum / cpuConcurrency
-	if cpuGoMaxProcs <= 0 {
-		cpuGoMaxProcs = 1
+	if memOpts.buildTaskMemBytes == 0 || memOpts.buildThreadMemBytes == 0 {
+		return buildLimits{memOpts: memOpts}, fmt.Errorf("invalid memory thresholds: buildTaskMem=%d, buildThreadMem=%d", memOpts.buildTaskMemBytes, memOpts.buildThreadMemBytes)
 	}
 
-	memConcurrency, memGoMaxProcs, availableMem, err := memoryLimits(memOpts)
+	vm, err := mem.VirtualMemory()
 	if err != nil {
+		return buildLimits{memOpts: memOpts}, fmt.Errorf("failed to read system memory: %w", err)
+	}
+
+	availableMem := vm.Available
+	minRequired := memOpts.buildTaskMemBytes + memOpts.buildThreadMemBytes
+	if availableMem < minRequired {
+		return buildLimits{available: availableMem, memOpts: memOpts}, insufficientMemoryErr(availableMem, memOpts)
+	}
+
+	maxConcurrency := cpuConcurrency
+	maxByTask := int(availableMem / memOpts.buildTaskMemBytes)
+	if maxByTask < maxConcurrency {
+		maxConcurrency = maxByTask
+	}
+	if maxConcurrency < 1 {
+		return buildLimits{available: availableMem, memOpts: memOpts}, insufficientMemoryErr(availableMem, memOpts)
+	}
+
+	for t := maxConcurrency; t >= 1; t-- {
+		pCPU := cpuNum / t
+		if pCPU < 1 {
+			pCPU = 1
+		}
+		perTask := availableMem / uint64(t)
+		if perTask <= memOpts.buildTaskMemBytes {
+			continue
+		}
+		threadBudget := perTask - memOpts.buildTaskMemBytes
+		pMem := int(threadBudget / memOpts.buildThreadMemBytes)
+		if pMem < 1 {
+			continue
+		}
+
+		p := pMem
+		if p > pCPU {
+			p = pCPU
+		}
+
 		return buildLimits{
-			available: availableMem,
-			memOpts:   memOpts,
-		}, err
+			concurrency: t,
+			goMaxProcs:  p,
+			available:   availableMem,
+			memOpts:     memOpts,
+		}, nil
 	}
 
-	concurrency := cpuConcurrency
-	if memConcurrency < concurrency {
-		concurrency = memConcurrency
-	}
+	return buildLimits{available: availableMem, memOpts: memOpts}, insufficientMemoryErr(availableMem, memOpts)
+}
 
-	goMaxProcs := cpuGoMaxProcs
-	if memGoMaxProcs < goMaxProcs {
-		goMaxProcs = memGoMaxProcs
-	}
-
-	if concurrency < 1 || goMaxProcs < 1 {
-		return buildLimits{}, fmt.Errorf(
-			"insufficient memory for compilation: available=%s, buildTaskMem=%s, buildThreadMem=%s",
-			formatBytes(availableMem),
-			formatBytes(memOpts.buildTaskMemBytes),
-			formatBytes(memOpts.buildThreadMemBytes),
-		)
-	}
-
-	return buildLimits{
-		concurrency: concurrency,
-		goMaxProcs:  goMaxProcs,
-		available:   availableMem,
-		memOpts:     memOpts,
-	}, nil
+func insufficientMemoryErr(availableBytes uint64, memOpts buildMemOptions) error {
+	return fmt.Errorf(
+		"insufficient available memory: available=%s, buildTaskMem=%s, buildThreadMem=%s",
+		formatBytes(availableBytes),
+		formatBytes(memOpts.buildTaskMemBytes),
+		formatBytes(memOpts.buildThreadMemBytes),
+	)
 }

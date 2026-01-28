@@ -296,7 +296,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	concurrency := limits.concurrency
 	goMaxProcs := limits.goMaxProcs
 
-	PrintGreen(fmt.Sprintf("The number of concurrent compilations is %d", concurrency))
+	PrintGreen(fmt.Sprintf("Concurrent compilations: %d, GOMAXPROCS per build: %d", concurrency, goMaxProcs))
 	PrintGreen(fmt.Sprintf(
 		"Memory limit: available=%s, buildTaskMem=%s, buildThreadMem=%s",
 		formatBytes(limits.available),
