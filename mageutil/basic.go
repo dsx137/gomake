@@ -301,8 +301,8 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	if cpuNum/4 < concurrency {
 		concurrency = cpuNum / 4
 	}
-	if concurrency <= 0 {
-		concurrency = 1
+	if concurrency <= 1 {
+		concurrency = 2
 	}
 
 	PrintGreen(fmt.Sprintf("The number of concurrent compilations is %d", concurrency))
