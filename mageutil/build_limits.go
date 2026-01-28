@@ -75,9 +75,6 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions) (buildLimit
 	if compileCount < cpuNum {
 		cpuConcurrency = compileCount
 	}
-	if cpuNum < cpuConcurrency {
-		cpuConcurrency = cpuNum
-	}
 	if cpuConcurrency <= 0 {
 		cpuConcurrency = 1
 	}
@@ -101,9 +98,6 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions) (buildLimit
 	maxByTask := int(availableMem / memOpts.buildTaskMemBytes)
 	if maxByTask < maxConcurrency {
 		maxConcurrency = maxByTask
-	}
-	if maxConcurrency < 1 {
-		return buildLimits{available: availableMem, memOpts: memOpts}, insufficientMemoryErr(availableMem, memOpts)
 	}
 
 	for t := maxConcurrency; t >= 1; t-- {
