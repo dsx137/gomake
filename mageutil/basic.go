@@ -150,7 +150,7 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) {
 }
 
 // CompileForPlatform Main compile function
-func CompileForPlatform(cgoEnabled string, platform string, compileBinaries []string) {
+func CompileForPlatform(cgoEnabled string, platform string, compileBinaries []string, memOpts buildMemOptions) {
 	var cmdBinaries, toolsBinaries []string
 
 	toolsPrefix := Paths.ToolsDir
@@ -200,14 +200,14 @@ func CompileForPlatform(cgoEnabled string, platform string, compileBinaries []st
 		PrintBlue(fmt.Sprintf("Compiling cmd binaries for %s...", platform))
 		// PrintBlue(fmt.Sprintf("Source directory: %s", filepath.Join(Paths.Root, Paths.SrcDir)))
 		// PrintBlue(fmt.Sprintf("Output directory: %s", Paths.OutputBinPath))
-		cmdCompiledDirs = compileDir(cgoEnabled, filepath.Join(Paths.Root, Paths.SrcDir), Paths.OutputBinPath, platform, cmdBinaries)
+		cmdCompiledDirs = compileDir(cgoEnabled, filepath.Join(Paths.Root, Paths.SrcDir), Paths.OutputBinPath, platform, cmdBinaries, memOpts)
 	}
 
 	if len(toolsBinaries) > 0 {
 		PrintBlue(fmt.Sprintf("Compiling tools binaries for %s...", platform))
 		// PrintBlue(fmt.Sprintf("Source directory: %s", filepath.Join(Paths.Root, Paths.ToolsDir)))
 		// PrintBlue(fmt.Sprintf("Output directory: %s", Paths.OutputBinToolPath))
-		toolsCompiledDirs = compileDir(cgoEnabled, filepath.Join(Paths.Root, Paths.ToolsDir), Paths.OutputBinToolPath, platform, toolsBinaries)
+		toolsCompiledDirs = compileDir(cgoEnabled, filepath.Join(Paths.Root, Paths.ToolsDir), Paths.OutputBinToolPath, platform, toolsBinaries, memOpts)
 	}
 
 	createStartConfigYML(cmdCompiledDirs, toolsCompiledDirs)
@@ -261,7 +261,7 @@ func getMainFile(binaryPath string) (string, error) {
 	return retPath, nil
 }
 
-func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compileBinaries []string) []string {
+func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compileBinaries []string, memOpts buildMemOptions) []string {
 	// PrintBlue("=== compileDir called ===")
 	// PrintBlue(fmt.Sprintf("sourceDir: %s", sourceDir))
 	// PrintBlue(fmt.Sprintf("outputBase: %s", outputBase))
@@ -287,25 +287,23 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 		os.Exit(1)
 	}
 
-	cpuNum := runtime.GOMAXPROCS(0)
-	if cpuNum <= 0 {
-		cpuNum = runtime.NumCPU()
-	} else if cpuNum > runtime.NumCPU() {
-		cpuNum = runtime.NumCPU()
+	limits, err := calculateBuildLimits(len(compileBinaries), memOpts)
+	if err != nil {
+		PrintRed(err.Error())
+		os.Exit(1)
 	}
 
-	concurrency := cpuNum
-	if len(compileBinaries) < cpuNum {
-		concurrency = len(compileBinaries)
-	}
-	if cpuNum < concurrency {
-		concurrency = cpuNum
-	}
-	if concurrency <= 0 {
-		concurrency = 1
-	}
+	concurrency := limits.concurrency
+	goMaxProcs := limits.goMaxProcs
 
 	PrintGreen(fmt.Sprintf("The number of concurrent compilations is %d", concurrency))
+	PrintGreen(fmt.Sprintf(
+		"Memory limit: available=%s, buildTaskMem=%s, buildThreadMem=%s",
+		formatBytes(limits.available),
+		formatBytes(limits.memOpts.buildTaskMemBytes),
+		formatBytes(limits.memOpts.buildThreadMemBytes),
+	))
+
 	task := make(chan int, concurrency)
 	go func() {
 		for i := range compileBinaries {
@@ -316,11 +314,6 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 
 	res := make(chan string, 1)
 	running := int64(concurrency)
-
-	goMaxProcs := cpuNum / concurrency
-	if goMaxProcs <= 0 {
-		goMaxProcs = 1
-	}
 
 	env := map[string]string{
 		"GOMAXPROCS":  strconv.Itoa(goMaxProcs),
@@ -420,6 +413,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 }
 
 func Build(binaries []string, pathOpts *PathOptions) {
+	memOpts := resolveBuildMemOptions(pathOpts)
 	if _, err := os.Stat(StartConfigFile); err == nil {
 		InitForSSC()
 		//KillExistBinaries()
@@ -442,7 +436,7 @@ func Build(binaries []string, pathOpts *PathOptions) {
 		PrintBlue(fmt.Sprintf("CGO_ENABLED %s", cgoEnabled))
 	}
 	for _, platform := range strings.Split(platforms, " ") {
-		CompileForPlatform(cgoEnabled, platform, compileBinaries)
+		CompileForPlatform(cgoEnabled, platform, compileBinaries, memOpts)
 	}
 	PrintGreen("All specified binaries under cmd and tools were successfully compiled.")
 }
