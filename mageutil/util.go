@@ -152,3 +152,11 @@ func isMemoryFSType(fsType string) bool {
 		return false
 	}
 }
+
+func normalizeExePath(path string) string {
+	const deletedSuffix = " (deleted)"
+	if strings.HasSuffix(path, deletedSuffix) {
+		return strings.TrimSuffix(path, deletedSuffix)
+	}
+	return path
+}

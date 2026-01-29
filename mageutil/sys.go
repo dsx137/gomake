@@ -47,6 +47,7 @@ func FetchProcesses() (map[string]int, error) {
 		if err != nil {
 			continue // Skip processes where the executable path cannot be determined
 		}
+		exePath = normalizeExePath(exePath)
 		processMap[exePath]++
 	}
 
@@ -75,6 +76,7 @@ func FindPIDsByBinaryPath() (map[string][]int, error) {
 			continue
 		}
 
+		exePath = normalizeExePath(exePath)
 		pidMap[exePath] = append(pidMap[exePath], int(proc.Pid))
 	}
 
@@ -139,6 +141,7 @@ func BatchKillExistBinaries(binaryPaths []string) {
 		if err != nil {
 			continue // Skip processes where the executable path cannot be determined
 		}
+		exePath = normalizeExePath(exePath)
 		exePathMap[exePath] = append(exePathMap[exePath], p)
 	}
 
@@ -186,6 +189,7 @@ func KillExistBinary(binaryPath string) {
 			continue
 		}
 
+		exePath = normalizeExePath(exePath)
 		if strings.Contains(exePath, binaryPath) {
 
 			//if strings.EqualFold(exePath, binaryPath) {
