@@ -12,7 +12,6 @@ import (
 )
 
 func ExportMageLauncherArchived(otherPaths ...string) error {
-	// 在导出前先确保构建完成
 	PrintBlue("Preparing launcher archive export...")
 	PrintBlue("Building binaries before export...")
 	Build(nil, nil)
