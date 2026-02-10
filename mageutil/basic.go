@@ -422,7 +422,9 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 
 				buildArgs := []string{"go", "build", "-o", outputPath}
 
-				buildArgs = append(buildArgs, "-trimpath", "-ldflags", "-s -w -extldflags '-static'")
+				if strings.ToLower(os.Getenv("RELEASE")) == "true" {
+					buildArgs = append(buildArgs, "-trimpath", "-ldflags", "-s -w -extldflags '-static'")
+				}
 				buildArgs = append(buildArgs, "-tags", "osusergo,netgo")
 
 				buildArgs = append(buildArgs, buildTarget)
@@ -438,12 +440,14 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 
 				PrintGreen(fmt.Sprintf("Successfully compiled. dir: %s for platform: %s binary: %s", dirName, platform, outputFileName))
 
-				PrintBlue(fmt.Sprintf("Compressing %s with UPX...", outputFileName))
-				upxArgs := []string{"upx", "--best", outputPath}
-				if err := RunWithPriority(PriorityLow, nil, upxArgs...); err != nil {
-					PrintYellow(fmt.Sprintf("UPX compression failed for %s (non-fatal): %v", outputFileName, err))
-				} else {
-					PrintGreen(fmt.Sprintf("Successfully compressed with UPX: %s", outputFileName))
+				if strings.ToLower(os.Getenv("COMPRESS")) == "true" {
+					PrintBlue(fmt.Sprintf("Compressing %s with UPX...", outputFileName))
+					upxArgs := []string{"upx", "--lzma", outputPath}
+					if err := RunWithPriority(PriorityLow, nil, upxArgs...); err != nil {
+						PrintYellow(fmt.Sprintf("UPX compression failed for %s (non-fatal): %v", outputFileName, err))
+					} else {
+						PrintGreen(fmt.Sprintf("Successfully compressed with UPX: %s", outputFileName))
+					}
 				}
 
 				res <- dirName
