@@ -285,6 +285,8 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 	// PrintBlue(fmt.Sprintf("platform: %s", platform))
 	// PrintBlue(fmt.Sprintf("compileBinaries: %v", compileBinaries))
 
+	PrintBlue(fmt.Sprintf("Build flags: RELEASE=%s, COMPRESS=%s", os.Getenv("RELEASE"), os.Getenv("COMPRESS")))
+
 	if info, err := os.Stat(sourceDir); err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -423,9 +425,8 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 				buildArgs := []string{"go", "build", "-o", outputPath}
 
 				if strings.ToLower(os.Getenv("RELEASE")) == "true" {
-					buildArgs = append(buildArgs, "-trimpath", "-ldflags", "-s -w -extldflags '-static'")
+					buildArgs = append(buildArgs, "-trimpath", "-ldflags", "-s -w")
 				}
-				buildArgs = append(buildArgs, "-tags", "osusergo,netgo")
 
 				buildArgs = append(buildArgs, buildTarget)
 
