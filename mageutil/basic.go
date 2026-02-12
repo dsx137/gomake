@@ -424,6 +424,7 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 
 				buildArgs := []string{"go", "build", "-o", outputPath}
 				if strings.ToLower(os.Getenv("RELEASE")) == "true" {
+					PrintBlue("Building in release mode with optimizations...")
 					buildArgs = append(buildArgs, "-trimpath", "-ldflags", "-s -w")
 				}
 				buildArgs = append(buildArgs, buildTarget)
