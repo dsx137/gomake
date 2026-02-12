@@ -423,11 +423,9 @@ func compileDir(cgoEnabled string, sourceDir, outputBase, platform string, compi
 				// PrintBlue(fmt.Sprintf("DEBUG: path = '%s'", path))
 
 				buildArgs := []string{"go", "build", "-o", outputPath}
-
 				if strings.ToLower(os.Getenv("RELEASE")) == "true" {
 					buildArgs = append(buildArgs, "-trimpath", "-ldflags", "-s -w")
 				}
-
 				buildArgs = append(buildArgs, buildTarget)
 
 				err = RunWithPriority(PriorityLow, env, buildArgs...)
