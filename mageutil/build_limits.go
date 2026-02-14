@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/openimsdk/gomake/internal/util"
 	"github.com/shirou/gopsutil/mem"
 )
 
@@ -17,7 +18,7 @@ type buildMemOptions struct {
 	buildThreadMemBytes uint64
 }
 
-func resolveBuildMemOptions(opts *PathOptions) buildMemOptions {
+func resolveBuildMemOptions(opts *BuildOptions) buildMemOptions {
 	memOpts := buildMemOptions{
 		buildTaskMemBytes:   defaultBuildTaskMemBytes,
 		buildThreadMemBytes: defaultBuildThreadMemBytes,
@@ -43,41 +44,40 @@ type buildLimits struct {
 	memOpts       buildMemOptions
 }
 
-func calculateBuildLimits(compileCount int, memOpts buildMemOptions) (buildLimits, error) {
+func calculateBuildLimits(compileCount int, memOpts buildMemOptions, tempRoot string) (buildLimits, error) {
 	if memOpts.buildTaskMemBytes == 0 || memOpts.buildThreadMemBytes == 0 {
 		return buildLimits{memOpts: memOpts},
 			fmt.Errorf("invalid memory thresholds: task=%d, thread=%d",
 				memOpts.buildTaskMemBytes, memOpts.buildThreadMemBytes)
 	}
 
-	cpuNum := clamp(runtime.GOMAXPROCS(0), 1, runtime.NumCPU())
-	cpuConcurrency := clamp(compileCount, 1, cpuNum)
+	cpuNum := util.Clamp(runtime.GOMAXPROCS(0), 1, runtime.NumCPU())
+	cpuConcurrency := util.Clamp(compileCount, 1, cpuNum)
 
 	vm, err := mem.VirtualMemory()
 	if err != nil {
 		return buildLimits{memOpts: memOpts}, fmt.Errorf("read system memory: %w", err)
 	}
 
-	tempRoot := resolveGoBuildTempRoot()
-	tempInfo := resolveTempStorageInfo(tempRoot)
+	tempInfo := util.ResolveTempStorageInfo(tempRoot)
 
 	taskBudget := vm.Available
-	if !tempInfo.inMemory {
-		taskBudget = tempInfo.availableDisk
+	if !tempInfo.InMemory {
+		taskBudget = tempInfo.AvailableDisk
 	}
 	threadBudget := vm.Available
 
 	limits := buildLimits{
 		availableMem:  vm.Available,
-		availableDisk: tempInfo.availableDisk,
-		tempInMemory:  tempInfo.inMemory,
+		availableDisk: tempInfo.AvailableDisk,
+		tempInMemory:  tempInfo.InMemory,
 		memOpts:       memOpts,
 	}
 
 	// 基础可行性检查
-	if !hasMinimumResources(taskBudget, threadBudget, memOpts, tempInfo.inMemory) {
+	if !hasMinimumResources(taskBudget, threadBudget, memOpts, tempInfo.InMemory) {
 		return limits, insufficientResourcesErr(
-			vm.Available, tempInfo.availableDisk, memOpts, tempInfo.inMemory)
+			vm.Available, tempInfo.AvailableDisk, memOpts, tempInfo.InMemory)
 	}
 
 	maxTasks := min(cpuConcurrency, int(taskBudget/memOpts.buildTaskMemBytes))
@@ -91,7 +91,7 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions) (buildLimit
 	for t := maxTasks; t >= 1; t-- {
 		pCPU := max(1, cpuNum/t)
 		pMem := maxThreadsPerTask(
-			t, taskBudget, threadBudget, memOpts, tempInfo.inMemory,
+			t, taskBudget, threadBudget, memOpts, tempInfo.InMemory,
 		)
 
 		p := min(pCPU, pMem)
@@ -118,17 +118,17 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions) (buildLimit
 		return limits, nil
 	}
 	return limits, insufficientResourcesErr(
-		vm.Available, tempInfo.availableDisk, memOpts, tempInfo.inMemory)
+		vm.Available, tempInfo.AvailableDisk, memOpts, tempInfo.InMemory)
 }
 
 func insufficientResourcesErr(availableMem, availableDisk uint64, memOpts buildMemOptions, tempInMemory bool) error {
 	return fmt.Errorf(
 		"insufficient available resources: tempInMemory=%t,diskAvailable=%s, memAvailable=%s, buildTaskMem=%s, buildThreadMem=%s",
 		tempInMemory,
-		formatBytes(availableDisk),
-		formatBytes(availableMem),
-		formatBytes(memOpts.buildTaskMemBytes),
-		formatBytes(memOpts.buildThreadMemBytes),
+		util.FormatBytes(availableDisk),
+		util.FormatBytes(availableMem),
+		util.FormatBytes(memOpts.buildTaskMemBytes),
+		util.FormatBytes(memOpts.buildThreadMemBytes),
 	)
 }
 

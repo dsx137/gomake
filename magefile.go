@@ -74,7 +74,7 @@ func Build() {
 		bin = bin[1:]
 	}
 
-	mageutil.Build(bin, nil)
+	mageutil.Build(bin, nil, nil)
 }
 
 func BuildWithCustomConfig() {
@@ -91,7 +91,7 @@ func BuildWithCustomConfig() {
 		ToolsDir:  &customToolsDir,  // default is "tools"
 	}
 
-	mageutil.Build(bin, config)
+	mageutil.Build(bin, config, nil)
 }
 
 func Start() {

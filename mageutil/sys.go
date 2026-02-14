@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/openimsdk/gomake/internal/util"
 	"github.com/shirou/gopsutil/net"
 	"github.com/shirou/gopsutil/process"
 )
@@ -47,7 +48,7 @@ func FetchProcesses() (map[string]int, error) {
 		if err != nil {
 			continue // Skip processes where the executable path cannot be determined
 		}
-		exePath = normalizeExePath(exePath)
+		exePath = util.NormalizeExePath(exePath)
 		processMap[exePath]++
 	}
 
@@ -76,7 +77,7 @@ func FindPIDsByBinaryPath() (map[string][]int, error) {
 			continue
 		}
 
-		exePath = normalizeExePath(exePath)
+		exePath = util.NormalizeExePath(exePath)
 		pidMap[exePath] = append(pidMap[exePath], int(proc.Pid))
 	}
 
@@ -141,7 +142,7 @@ func BatchKillExistBinaries(binaryPaths []string) {
 		if err != nil {
 			continue // Skip processes where the executable path cannot be determined
 		}
-		exePath = normalizeExePath(exePath)
+		exePath = util.NormalizeExePath(exePath)
 		exePathMap[exePath] = append(exePathMap[exePath], p)
 	}
 
@@ -189,7 +190,7 @@ func KillExistBinary(binaryPath string) {
 			continue
 		}
 
-		exePath = normalizeExePath(exePath)
+		exePath = util.NormalizeExePath(exePath)
 		if strings.Contains(exePath, binaryPath) {
 
 			//if strings.EqualFold(exePath, binaryPath) {

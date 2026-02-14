@@ -23,7 +23,7 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string) error {
 		return err
 	}
 	defer restoreEnv()
-	Build(nil, nil)
+	Build(nil, nil, nil)
 
 	tmpDir := Paths.OutputTmp
 	PrintBlue(fmt.Sprintf("Using tmp directory: %s", tmpDir))

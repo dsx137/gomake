@@ -49,10 +49,6 @@ type PathOptions struct {
 
 	SrcDir   *string // Custom cmd source directory name, default is "cmd"
 	ToolsDir *string // Custom tools source directory name, default is "tools"
-
-	// Build memory strategy (bytes). Defaults: buildTaskMem=1GiB, buildThreadMem=500MiB.
-	BuildTaskMemBytes   *uint64
-	BuildThreadMemBytes *uint64
 }
 
 var Paths *PathConfig

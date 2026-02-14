@@ -1,6 +1,58 @@
 package util
 
-import "os"
+import (
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+var ErrEnvNotSet = errors.New("environment variable not set")
+var ErrUnsupportedEnvType = errors.New("unsupported env type")
+
+func GetEnv[T any](key string) (T, error) {
+	var zero T
+	raw, ok := os.LookupEnv(key)
+	if !ok {
+		return zero, ErrEnvNotSet
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return zero, ErrEnvNotSet
+	}
+
+	switch any(zero).(type) {
+	case string:
+		return any(raw).(T), nil
+	case bool:
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			return zero, fmt.Errorf("parse %s=%q as bool: %w", key, raw, err)
+		}
+		return any(value).(T), nil
+	case int:
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return zero, fmt.Errorf("parse %s=%q as int: %w", key, raw, err)
+		}
+		return any(value).(T), nil
+	case uint64:
+		value, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			return zero, fmt.Errorf("parse %s=%q as uint64: %w", key, raw, err)
+		}
+		return any(value).(T), nil
+	case []string:
+		values := strings.Fields(raw)
+		if len(values) == 0 {
+			return zero, ErrEnvNotSet
+		}
+		return any(values).(T), nil
+	default:
+		return zero, fmt.Errorf("%w: %T", ErrUnsupportedEnvType, zero)
+	}
+}
 
 func SetEnvs(envMap map[string]string) (func(), error) {
 	oldEnv := make(map[string]string)
