@@ -167,8 +167,13 @@ func isExecutableFile(filePath string) bool {
 }
 
 func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) {
-	envBuildOpt := resolveBuildOptionsFromEnv()
-	resolvedBuildOpt := ResolveBuildOptions(buildOpt, &envBuildOpt)
+	resolvedBuildOpt := ResolveBuildOptions(buildOpt, &BuildOptions{
+		CgoEnabled:      resolveEnvOption[string]("CGO_ENABLED"),
+		Release:         resolveEnvOption[bool]("RELEASE"),
+		Compress:        resolveEnvOption[bool]("COMPRESS"),
+		Platforms:       resolveEnvOption[[]string]("PLATFORMS"),
+		GoBuildTempRoot: resolveEnvOption[string]("GOTMPDIR"),
+	})
 	memOpts := resolveBuildMemOptions(&resolvedBuildOpt)
 	if _, err := os.Stat(StartConfigFile); err == nil {
 		InitForSSC()

@@ -11,46 +11,51 @@ import (
 var ErrEnvNotSet = errors.New("environment variable not set")
 var ErrUnsupportedEnvType = errors.New("unsupported env type")
 
-func GetEnv[T any](key string) (T, error) {
+func GetEnv[T any](key string) (*T, error) {
 	var zero T
 	raw, ok := os.LookupEnv(key)
 	if !ok {
-		return zero, ErrEnvNotSet
+		return nil, ErrEnvNotSet
 	}
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return zero, ErrEnvNotSet
+		return nil, ErrEnvNotSet
 	}
 
 	switch any(zero).(type) {
 	case string:
-		return any(raw).(T), nil
+		value := any(raw).(T)
+		return &value, nil
 	case bool:
 		value, err := strconv.ParseBool(raw)
 		if err != nil {
-			return zero, fmt.Errorf("parse %s=%q as bool: %w", key, raw, err)
+			return nil, fmt.Errorf("parse %s=%q as bool: %w", key, raw, err)
 		}
-		return any(value).(T), nil
+		resolved := any(value).(T)
+		return &resolved, nil
 	case int:
 		value, err := strconv.Atoi(raw)
 		if err != nil {
-			return zero, fmt.Errorf("parse %s=%q as int: %w", key, raw, err)
+			return nil, fmt.Errorf("parse %s=%q as int: %w", key, raw, err)
 		}
-		return any(value).(T), nil
+		resolved := any(value).(T)
+		return &resolved, nil
 	case uint64:
 		value, err := strconv.ParseUint(raw, 10, 64)
 		if err != nil {
-			return zero, fmt.Errorf("parse %s=%q as uint64: %w", key, raw, err)
+			return nil, fmt.Errorf("parse %s=%q as uint64: %w", key, raw, err)
 		}
-		return any(value).(T), nil
+		resolved := any(value).(T)
+		return &resolved, nil
 	case []string:
 		values := strings.Fields(raw)
 		if len(values) == 0 {
-			return zero, ErrEnvNotSet
+			return nil, ErrEnvNotSet
 		}
-		return any(values).(T), nil
+		resolved := any(values).(T)
+		return &resolved, nil
 	default:
-		return zero, fmt.Errorf("%w: %T", ErrUnsupportedEnvType, zero)
+		return nil, fmt.Errorf("%w: %T", ErrUnsupportedEnvType, zero)
 	}
 }
 

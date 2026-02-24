@@ -2,27 +2,27 @@ package mageutil
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/klauspost/compress/zstd"
 	"github.com/openimsdk/gomake/internal/util"
 )
 
 func ExportMageLauncherArchived(overrideMappingPaths map[string]string) error {
 	PrintBlue("Preparing launcher archive export...")
 	PrintBlue("Building binaries before export...")
-	restoreEnv, err := util.SetEnvs(map[string]string{
-		"RELEASE":  "true",
-		"COMPRESS": "true",
-	})
-	if err != nil {
-		return err
-	}
-	defer restoreEnv()
+	//restoreEnv, err := util.SetEnvs(map[string]string{
+	//	"RELEASE":  "true",
+	//	"COMPRESS": "true",
+	//})
+	//if err != nil {
+	//	return err
+	//}
+	//defer restoreEnv()
 	Build(nil, nil, nil)
 
 	tmpDir := Paths.OutputTmp
@@ -83,7 +83,7 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string) error {
 			mappingPaths[k] = v
 		}
 
-		err = archive(filepath.Join(tmpDir, fmt.Sprintf("launcher_%s.tar.zst", platform)), mappingPaths)
+		err = archive(filepath.Join(tmpDir, fmt.Sprintf("launcher_%s", platform)), mappingPaths)
 		if err != nil {
 			return err
 		}
@@ -92,23 +92,25 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string) error {
 }
 
 func archive(archivePath string, mappingPaths map[string]string) error {
+	archivePath = fmt.Sprintf("%s.tar.gz", archivePath)
 	PrintBlue(fmt.Sprintf("Creating archive: %s", archivePath))
 	archiveFile, err := os.Create(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to create archive file %s: %v", archivePath, err)
 	}
 	defer archiveFile.Close()
-	//gzipWriter, err := gzip.NewWriterLevel(archiveFile, gzip.BestCompression)
-	//if err != nil {
-	//	return fmt.Errorf("failed to create gzip writer: %v", err)
-	//}
-	//defer gzipWriter.Close()
-	zstdWriter, err := zstd.NewWriter(archiveFile, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
+	gzipWriter, err := gzip.NewWriterLevel(archiveFile, gzip.BestCompression)
 	if err != nil {
-		return fmt.Errorf("failed to create zstd writer: %v", err)
+		return fmt.Errorf("failed to create gzip writer: %v", err)
 	}
-	defer zstdWriter.Close()
-	tarWriter := tar.NewWriter(zstdWriter)
+	defer gzipWriter.Close()
+	// or zstd
+	//zstdWriter, err := zstd.NewWriter(archiveFile, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
+	//if err != nil {
+	//	return fmt.Errorf("failed to create zstd writer: %v", err)
+	//}
+	//defer zstdWriter.Close()
+	tarWriter := tar.NewWriter(gzipWriter)
 	defer tarWriter.Close()
 
 	for in, out := range mappingPaths {

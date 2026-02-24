@@ -304,16 +304,6 @@ func applyBuildOverride(desc string, override *int, target *int) {
 	PrintBlue(fmt.Sprintf("Using %s override value=%d", desc, *override))
 }
 
-func resolveBuildOptionsFromEnv() BuildOptions {
-	return BuildOptions{
-		CgoEnabled:      resolveEnvOption[string]("CGO_ENABLED"),
-		Release:         resolveEnvOption[bool]("RELEASE"),
-		Compress:        resolveEnvOption[bool]("COMPRESS"),
-		Platforms:       resolveEnvOption[[]string]("PLATFORMS"),
-		GoBuildTempRoot: resolveEnvOption[string]("GOTMPDIR"),
-	}
-}
-
 func ResolveBuildOptions(codeOpt *BuildOptions, envOpt *BuildOptions) BuildOptions {
 	fromCode := BuildOptions{}
 	if codeOpt != nil {
@@ -345,7 +335,7 @@ func boolOption(opt *bool) bool {
 func resolveEnvOption[T any](key string) *T {
 	value, err := util.GetEnv[T](key)
 	if err == nil {
-		return &value
+		return value
 	}
 	if errors.Is(err, util.ErrEnvNotSet) {
 		return nil
