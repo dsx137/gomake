@@ -98,8 +98,6 @@ func NewPathConfig(opts *PathOptions) (*PathConfig, error) {
 	outputDir := OutputDir
 	if opts != nil && opts.OutputDir != nil {
 		outputDir = *opts.OutputDir
-	} else if shouldUseFlatOutput(rootDir, srcDir, toolsDir) {
-		outputDir = "."
 	}
 
 	config := &PathConfig{
@@ -201,23 +199,6 @@ func (p *PathConfig) createDirectories() error {
 // createDirIfNotExist creates directory if it doesn't exist
 func (p *PathConfig) createDirIfNotExist(dir string) error {
 	return os.MkdirAll(dir, 0755)
-}
-
-func shouldUseFlatOutput(rootDir, srcDir, toolsDir string) bool {
-	if dirExists(filepath.Join(rootDir, srcDir)) || dirExists(filepath.Join(rootDir, toolsDir)) {
-		return false
-	}
-	flatBin := filepath.Join(rootDir, BinDir, PlatformsDir)
-	defaultBin := filepath.Join(rootDir, OutputDir, BinDir, PlatformsDir)
-	return dirExists(flatBin) && !dirExists(defaultBin)
-}
-
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.IsDir()
 }
 
 // GetBinFullPath returns the full path for a binary file
