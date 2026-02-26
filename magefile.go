@@ -6,49 +6,11 @@ package main
 import (
 	"flag"
 	"os"
-	"path/filepath"
 
 	"github.com/openimsdk/gomake/mageutil"
 )
 
-var Default = DefaultTarget
-
-func DefaultTarget() {
-	if shouldUseLauncherDefault() {
-		Start()
-		return
-	}
-	Build()
-}
-
-func shouldUseLauncherDefault() bool {
-	if dirExists(filepath.Join(".", mageutil.SrcDir)) || dirExists(filepath.Join(".", mageutil.ToolsDir)) {
-		return false
-	}
-	if !fileExists(filepath.Join(".", mageutil.StartConfigFile)) {
-		return false
-	}
-	if dirExists(filepath.Join(".", mageutil.BinDir, mageutil.PlatformsDir)) {
-		return true
-	}
-	return dirExists(filepath.Join(".", mageutil.OutputDir, mageutil.BinDir, mageutil.PlatformsDir))
-}
-
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.IsDir()
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return !info.IsDir()
-}
+var Default = Build
 
 var Aliases = map[string]any{
 	"buildcc": BuildWithCustomConfig,
@@ -62,6 +24,9 @@ var (
 	customOutputDir = "_output"
 	customConfigDir = "config"
 	customToolsDir  = "tools"
+
+	customExportProjectName = "gomake"
+	customExportBuildOpt    *mageutil.BuildOptions
 )
 
 // Build support specifical binary build.
@@ -144,4 +109,16 @@ func Check() {
 
 func Protocol() {
 	mageutil.Protocol()
+}
+
+func Export() {
+	exportOpt := &mageutil.ExportOptions{
+		ProjectName: &customExportProjectName,
+		BuildOpt:    customExportBuildOpt,
+	}
+	err := mageutil.ExportMageLauncherArchived(nil, exportOpt)
+	if err != nil {
+		mageutil.PrintRed("export failed " + err.Error())
+		os.Exit(1)
+	}
 }

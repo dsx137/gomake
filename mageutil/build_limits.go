@@ -13,24 +13,25 @@ const (
 	defaultBuildThreadMemBytes = 500 * 1024 * 1024      // 500MiB per build thread (GOMAXPROCS)
 )
 
-type buildMemOptions struct {
-	buildTaskMemBytes   uint64
-	buildThreadMemBytes uint64
+type BuildMemOptions struct {
+	BuildTaskMemBytes   uint64
+	BuildThreadMemBytes uint64
 }
 
-func resolveBuildMemOptions(opts *BuildOptions) buildMemOptions {
-	memOpts := buildMemOptions{
-		buildTaskMemBytes:   defaultBuildTaskMemBytes,
-		buildThreadMemBytes: defaultBuildThreadMemBytes,
+func resolveBuildMemOptions(opts *BuildOptions) *BuildMemOptions {
+	memOpts := &BuildMemOptions{
+		BuildTaskMemBytes:   defaultBuildTaskMemBytes,
+		BuildThreadMemBytes: defaultBuildThreadMemBytes,
 	}
-	if opts == nil {
+	memOpt := opts.GetMemOpt()
+	if memOpt == nil {
 		return memOpts
 	}
-	if opts.BuildTaskMemBytes != nil && *opts.BuildTaskMemBytes > 0 {
-		memOpts.buildTaskMemBytes = *opts.BuildTaskMemBytes
+	if memOpt.BuildTaskMemBytes > 0 {
+		memOpts.BuildTaskMemBytes = memOpt.BuildTaskMemBytes
 	}
-	if opts.BuildThreadMemBytes != nil && *opts.BuildThreadMemBytes > 0 {
-		memOpts.buildThreadMemBytes = *opts.BuildThreadMemBytes
+	if memOpt.BuildThreadMemBytes > 0 {
+		memOpts.BuildThreadMemBytes = memOpt.BuildThreadMemBytes
 	}
 	return memOpts
 }
@@ -41,14 +42,19 @@ type buildLimits struct {
 	availableMem  uint64
 	availableDisk uint64
 	tempInMemory  bool
-	memOpts       buildMemOptions
 }
 
-func calculateBuildLimits(compileCount int, memOpts buildMemOptions, tempRoot string) (buildLimits, error) {
-	if memOpts.buildTaskMemBytes == 0 || memOpts.buildThreadMemBytes == 0 {
-		return buildLimits{memOpts: memOpts},
+func calculateBuildLimits(compileCount int, memOpts *BuildMemOptions, tempRoot string) (buildLimits, error) {
+	if memOpts == nil {
+		return buildLimits{}, fmt.Errorf("invalid memory thresholds: mem options are nil")
+	}
+
+	resolvedMemOpts := *memOpts
+
+	if resolvedMemOpts.BuildTaskMemBytes == 0 || resolvedMemOpts.BuildThreadMemBytes == 0 {
+		return buildLimits{},
 			fmt.Errorf("invalid memory thresholds: task=%d, thread=%d",
-				memOpts.buildTaskMemBytes, memOpts.buildThreadMemBytes)
+				resolvedMemOpts.BuildTaskMemBytes, resolvedMemOpts.BuildThreadMemBytes)
 	}
 
 	cpuNum := util.Clamp(runtime.GOMAXPROCS(0), 1, runtime.NumCPU())
@@ -56,7 +62,7 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions, tempRoot st
 
 	vm, err := mem.VirtualMemory()
 	if err != nil {
-		return buildLimits{memOpts: memOpts}, fmt.Errorf("read system memory: %w", err)
+		return buildLimits{}, fmt.Errorf("read system memory: %w", err)
 	}
 
 	tempInfo := util.ResolveTempStorageInfo(tempRoot)
@@ -71,16 +77,15 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions, tempRoot st
 		availableMem:  vm.Available,
 		availableDisk: tempInfo.AvailableDisk,
 		tempInMemory:  tempInfo.InMemory,
-		memOpts:       memOpts,
 	}
 
 	// 基础可行性检查
-	if !hasMinimumResources(taskBudget, threadBudget, memOpts, tempInfo.InMemory) {
+	if !hasMinimumResources(taskBudget, threadBudget, resolvedMemOpts, tempInfo.InMemory) {
 		return limits, insufficientResourcesErr(
-			vm.Available, tempInfo.AvailableDisk, memOpts, tempInfo.InMemory)
+			vm.Available, tempInfo.AvailableDisk, resolvedMemOpts, tempInfo.InMemory)
 	}
 
-	maxTasks := min(cpuConcurrency, int(taskBudget/memOpts.buildTaskMemBytes))
+	maxTasks := min(cpuConcurrency, int(taskBudget/resolvedMemOpts.BuildTaskMemBytes))
 	if maxTasks < 1 {
 		maxTasks = 1
 	}
@@ -91,7 +96,7 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions, tempRoot st
 	for t := maxTasks; t >= 1; t-- {
 		pCPU := max(1, cpuNum/t)
 		pMem := maxThreadsPerTask(
-			t, taskBudget, threadBudget, memOpts, tempInfo.InMemory,
+			t, taskBudget, threadBudget, resolvedMemOpts, tempInfo.InMemory,
 		)
 
 		p := min(pCPU, pMem)
@@ -118,41 +123,41 @@ func calculateBuildLimits(compileCount int, memOpts buildMemOptions, tempRoot st
 		return limits, nil
 	}
 	return limits, insufficientResourcesErr(
-		vm.Available, tempInfo.AvailableDisk, memOpts, tempInfo.InMemory)
+		vm.Available, tempInfo.AvailableDisk, resolvedMemOpts, tempInfo.InMemory)
 }
 
-func insufficientResourcesErr(availableMem, availableDisk uint64, memOpts buildMemOptions, tempInMemory bool) error {
+func insufficientResourcesErr(availableMem, availableDisk uint64, memOpts BuildMemOptions, tempInMemory bool) error {
 	return fmt.Errorf(
 		"insufficient available resources: tempInMemory=%t,diskAvailable=%s, memAvailable=%s, buildTaskMem=%s, buildThreadMem=%s",
 		tempInMemory,
 		util.FormatBytes(availableDisk),
 		util.FormatBytes(availableMem),
-		util.FormatBytes(memOpts.buildTaskMemBytes),
-		util.FormatBytes(memOpts.buildThreadMemBytes),
+		util.FormatBytes(memOpts.BuildTaskMemBytes),
+		util.FormatBytes(memOpts.BuildThreadMemBytes),
 	)
 }
 
-func hasMinimumResources(taskBudget uint64, threadBudget uint64, memOpts buildMemOptions, inMemory bool) bool {
+func hasMinimumResources(taskBudget uint64, threadBudget uint64, memOpts BuildMemOptions, inMemory bool) bool {
 	if inMemory {
-		return taskBudget >= memOpts.buildTaskMemBytes+memOpts.buildThreadMemBytes
+		return taskBudget >= memOpts.BuildTaskMemBytes+memOpts.BuildThreadMemBytes
 	}
 
-	return taskBudget >= memOpts.buildTaskMemBytes && threadBudget >= memOpts.buildThreadMemBytes
+	return taskBudget >= memOpts.BuildTaskMemBytes && threadBudget >= memOpts.BuildThreadMemBytes
 }
 
-func maxThreadsPerTask(t int, taskBudget, threadBudget uint64, memOpts buildMemOptions, inMemory bool) int {
+func maxThreadsPerTask(t int, taskBudget, threadBudget uint64, memOpts BuildMemOptions, inMemory bool) int {
 	if inMemory {
 		perTask := taskBudget / uint64(t)
-		if perTask <= memOpts.buildTaskMemBytes {
+		if perTask <= memOpts.BuildTaskMemBytes {
 			return 0
 		}
-		return int((perTask - memOpts.buildTaskMemBytes) / memOpts.buildThreadMemBytes)
+		return int((perTask - memOpts.BuildTaskMemBytes) / memOpts.BuildThreadMemBytes)
 	}
 
 	perTaskDisk := taskBudget / uint64(t)
-	if perTaskDisk < memOpts.buildTaskMemBytes {
+	if perTaskDisk < memOpts.BuildTaskMemBytes {
 		return 0
 	}
 	perTaskMem := threadBudget / uint64(t)
-	return int(perTaskMem / memOpts.buildThreadMemBytes)
+	return int(perTaskMem / memOpts.BuildThreadMemBytes)
 }

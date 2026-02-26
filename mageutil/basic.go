@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/openimsdk/gomake/internal/util"
 )
 
 // CheckAndReportBinariesStatus checks the running status of all binary files and reports it.
@@ -168,13 +170,12 @@ func isExecutableFile(filePath string) bool {
 
 func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) {
 	resolvedBuildOpt := ResolveBuildOptions(buildOpt, &BuildOptions{
-		CgoEnabled:      resolveEnvOption[string]("CGO_ENABLED"),
-		Release:         resolveEnvOption[bool]("RELEASE"),
-		Compress:        resolveEnvOption[bool]("COMPRESS"),
-		Platforms:       resolveEnvOption[[]string]("PLATFORMS"),
-		GoBuildTempRoot: resolveEnvOption[string]("GOTMPDIR"),
+		CgoEnabled:      util.ResolveEnvOption[string]("CGO_ENABLED"),
+		Release:         util.ResolveEnvOption[bool]("RELEASE"),
+		Compress:        util.ResolveEnvOption[bool]("COMPRESS"),
+		Platforms:       util.ResolveEnvOption[[]string]("PLATFORMS"),
+		GoBuildTempRoot: util.ResolveEnvOption[string]("GOTMPDIR"),
 	})
-	memOpts := resolveBuildMemOptions(&resolvedBuildOpt)
 	if _, err := os.Stat(StartConfigFile); err == nil {
 		InitForSSC()
 		//KillExistBinaries()
@@ -188,15 +189,15 @@ func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) {
 	}
 
 	compileBinaries := getBinaries(binaries)
-	if cgoEnabled := strings.TrimSpace(stringOption(resolvedBuildOpt.CgoEnabled)); cgoEnabled != "" {
+	if cgoEnabled := resolvedBuildOpt.GetCgoEnabled(); cgoEnabled != "" {
 		PrintBlue(fmt.Sprintf("CGO_ENABLED %s", cgoEnabled))
 	}
-	platforms := platformsOption(resolvedBuildOpt.Platforms)
+	platforms := resolvedBuildOpt.GetPlatforms()
 	if len(platforms) == 0 {
 		platforms = []string{DetectPlatform()}
 	}
 	for _, platform := range platforms {
-		CompileForPlatform(resolvedBuildOpt, platform, compileBinaries, memOpts)
+		CompileForPlatform(resolvedBuildOpt, platform, compileBinaries)
 	}
 	PrintGreen("All specified binaries under cmd and tools were successfully compiled.")
 }

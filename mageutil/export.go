@@ -12,23 +12,37 @@ import (
 	"github.com/openimsdk/gomake/internal/util"
 )
 
-func ExportMageLauncherArchived(overrideMappingPaths map[string]string) error {
+type ExportOptions struct {
+	ProjectName *string
+	BuildOpt    *BuildOptions
+}
+
+func (opt *ExportOptions) GetProjectName() string {
+	projectName := strings.TrimSpace(util.NilAsZero(util.NilAsZero(opt).ProjectName))
+	if projectName == "" {
+		return ""
+	}
+	return strings.NewReplacer("/", "_", "\\", "_").Replace(projectName)
+}
+
+func (opt *ExportOptions) GetBuildOpt() *BuildOptions {
+	return util.NilAsZero(opt).BuildOpt
+}
+
+func ExportMageLauncherArchived(overrideMappingPaths map[string]string, exportOpt *ExportOptions) error {
 	PrintBlue("Preparing launcher archive export...")
 	PrintBlue("Building binaries before export...")
-	//restoreEnv, err := util.SetEnvs(map[string]string{
-	//	"RELEASE":  "true",
-	//	"COMPRESS": "true",
-	//})
-	//if err != nil {
-	//	return err
-	//}
-	//defer restoreEnv()
-	Build(nil, nil, nil)
+	Build(nil, nil, exportOpt.GetBuildOpt())
 
 	tmpDir := Paths.OutputTmp
+	exportDir := Paths.OutputExport
 	PrintBlue(fmt.Sprintf("Using tmp directory: %s", tmpDir))
+	PrintBlue(fmt.Sprintf("Using export directory: %s", exportDir))
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
 		return fmt.Errorf("failed to create tmp directory %s: %v", tmpDir, err)
+	}
+	if err := os.MkdirAll(exportDir, 0755); err != nil {
+		return fmt.Errorf("failed to create export directory %s: %v", exportDir, err)
 	}
 
 	platforms := os.Getenv("PLATFORMS")
@@ -83,12 +97,21 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string) error {
 			mappingPaths[k] = v
 		}
 
-		err = archive(filepath.Join(tmpDir, fmt.Sprintf("launcher_%s", platform)), mappingPaths)
+		archiveName := exportArchiveBaseName(platform, exportOpt)
+		err = archive(filepath.Join(exportDir, archiveName), mappingPaths)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func exportArchiveBaseName(platform string, exportOpt *ExportOptions) string {
+	projectName := exportOpt.GetProjectName()
+	if projectName == "" {
+		return fmt.Sprintf("exported_%s", platform)
+	}
+	return fmt.Sprintf("exported_%s_%s", projectName, platform)
 }
 
 func archive(archivePath string, mappingPaths map[string]string) error {

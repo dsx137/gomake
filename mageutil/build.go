@@ -1,7 +1,6 @@
 package mageutil
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,22 +9,54 @@ import (
 	"sync/atomic"
 
 	"github.com/openimsdk/gomake/internal/util"
+	"github.com/openimsdk/tools/utils/datautil"
 )
 
 type BuildOptions struct {
-	CgoEnabled          *string
-	Release             *bool
-	Compress            *bool
-	Platforms           *[]string
-	GoBuildTempRoot     *string
-	TaskConcurrency     *int
-	TaskGoMaxProcs      *int
-	BuildTaskMemBytes   *uint64
-	BuildThreadMemBytes *uint64
+	CgoEnabled      *string
+	Release         *bool
+	Compress        *bool
+	Platforms       *[]string
+	GoBuildTempRoot *string
+	TaskConcurrency *int
+	TaskGoMaxProcs  *int
+	MemOpt          *BuildMemOptions
+}
+
+func (opt *BuildOptions) GetCgoEnabled() string {
+	return util.NilAsZero(util.NilAsZero(opt).CgoEnabled)
+}
+
+func (opt *BuildOptions) GetRelease() bool {
+	return util.NilAsZero(util.NilAsZero(opt).Release)
+}
+
+func (opt *BuildOptions) GetCompress() bool {
+	return util.NilAsZero(util.NilAsZero(opt).Compress)
+}
+
+func (opt *BuildOptions) GetPlatforms() []string {
+	return util.NilAsZero(util.NilAsZero(opt).Platforms)
+}
+
+func (opt *BuildOptions) GetGoBuildTempRoot() string {
+	return util.NilAsZero(util.NilAsZero(opt).GoBuildTempRoot)
+}
+
+func (opt *BuildOptions) GetTaskConcurrency() int {
+	return util.NilAsZero(util.NilAsZero(opt).TaskConcurrency)
+}
+
+func (opt *BuildOptions) GetTaskGoMaxProcs() int {
+	return util.NilAsZero(util.NilAsZero(opt).TaskGoMaxProcs)
+}
+
+func (opt *BuildOptions) GetMemOpt() *BuildMemOptions {
+	return util.NilAsZero(opt).MemOpt
 }
 
 // CompileForPlatform Main compile function
-func CompileForPlatform(buildOpt BuildOptions, platform string, compileBinaries []string, memOpts buildMemOptions) {
+func CompileForPlatform(buildOpt *BuildOptions, platform string, compileBinaries []string) {
 	var cmdBinaries, toolsBinaries []string
 
 	toolsPrefix := Paths.ToolsDir
@@ -75,22 +106,22 @@ func CompileForPlatform(buildOpt BuildOptions, platform string, compileBinaries 
 		PrintBlue(fmt.Sprintf("Compiling cmd binaries for %s...", platform))
 		// PrintBlue(fmt.Sprintf("Source directory: %s", filepath.Join(Paths.Root, Paths.SrcDir)))
 		// PrintBlue(fmt.Sprintf("Output directory: %s", Paths.OutputBinPath))
-		cmdCompiledDirs = compileDir(buildOpt, filepath.Join(Paths.Root, Paths.SrcDir), Paths.OutputBinPath, platform, cmdBinaries, memOpts)
+		cmdCompiledDirs = compileDir(buildOpt, filepath.Join(Paths.Root, Paths.SrcDir), Paths.OutputBinPath, platform, cmdBinaries)
 	}
 
 	if len(toolsBinaries) > 0 {
 		PrintBlue(fmt.Sprintf("Compiling tools binaries for %s...", platform))
-		toolsCompiledDirs = compileDir(buildOpt, filepath.Join(Paths.Root, Paths.ToolsDir), Paths.OutputBinToolPath, platform, toolsBinaries, memOpts)
+		toolsCompiledDirs = compileDir(buildOpt, filepath.Join(Paths.Root, Paths.ToolsDir), Paths.OutputBinToolPath, platform, toolsBinaries)
 	}
 
 	createStartConfigYML(cmdCompiledDirs, toolsCompiledDirs)
 }
 
-func compileDir(buildOpt BuildOptions, sourceDir, outputBase, platform string, compileBinaries []string, memOpts buildMemOptions) []string {
-	releaseEnabled := boolOption(buildOpt.Release)
-	compressEnabled := boolOption(buildOpt.Compress)
-	tempRoot := stringOption(buildOpt.GoBuildTempRoot)
-	cgoEnabled := strings.TrimSpace(stringOption(buildOpt.CgoEnabled))
+func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, compileBinaries []string) []string {
+	releaseEnabled := buildOpt.GetRelease()
+	compressEnabled := buildOpt.GetCompress()
+	tempRoot := buildOpt.GetGoBuildTempRoot()
+	cgoEnabled := buildOpt.GetCgoEnabled()
 
 	PrintBlue(fmt.Sprintf("Build flags: RELEASE=%t, COMPRESS=%t", releaseEnabled, compressEnabled))
 
@@ -113,33 +144,31 @@ func compileDir(buildOpt BuildOptions, sourceDir, outputBase, platform string, c
 		os.Exit(1)
 	}
 
+	memOpts := resolveBuildMemOptions(buildOpt)
 	limits, err := calculateBuildLimits(len(compileBinaries), memOpts, tempRoot)
 	if err != nil {
 		PrintRed(err.Error())
 		os.Exit(1)
 	}
 
-	concurrency := limits.concurrency
-	goMaxProcs := limits.goMaxProcs
-
-	applyBuildOverride("task concurrency", buildOpt.TaskConcurrency, &concurrency)
-	applyBuildOverride("task GOMAXPROCS", buildOpt.TaskGoMaxProcs, &goMaxProcs)
+	concurrency := datautil.If(buildOpt.TaskConcurrency == nil, limits.concurrency, buildOpt.GetTaskConcurrency())
+	goMaxProcs := datautil.If(buildOpt.TaskGoMaxProcs == nil, limits.goMaxProcs, buildOpt.GetTaskGoMaxProcs())
 
 	PrintGreen(fmt.Sprintf("Concurrent compilations: %d, GOMAXPROCS per build: %d", concurrency, goMaxProcs))
 	if limits.tempInMemory {
 		PrintGreen(fmt.Sprintf(
 			"Resource limit: tmpfs=true, memAvailable=%s, buildTaskMem=%s, buildThreadMem=%s",
 			util.FormatBytes(limits.availableMem),
-			util.FormatBytes(limits.memOpts.buildTaskMemBytes),
-			util.FormatBytes(limits.memOpts.buildThreadMemBytes),
+			util.FormatBytes(memOpts.BuildTaskMemBytes),
+			util.FormatBytes(memOpts.BuildThreadMemBytes),
 		))
 	} else {
 		PrintGreen(fmt.Sprintf(
 			"Resource limit: tmpfs=false, diskAvailable=%s, memAvailable=%s, buildTaskMem=%s, buildThreadMem=%s",
 			util.FormatBytes(limits.availableDisk),
 			util.FormatBytes(limits.availableMem),
-			util.FormatBytes(limits.memOpts.buildTaskMemBytes),
-			util.FormatBytes(limits.memOpts.buildThreadMemBytes),
+			util.FormatBytes(memOpts.BuildTaskMemBytes),
+			util.FormatBytes(memOpts.BuildThreadMemBytes),
 		))
 	}
 
@@ -296,15 +325,7 @@ func createStartConfigYML(cmdDirs, toolsDirs []string) {
 	PrintGreen("start-config.yml created successfully.")
 }
 
-func applyBuildOverride(desc string, override *int, target *int) {
-	if override == nil {
-		return
-	}
-	*target = *override
-	PrintBlue(fmt.Sprintf("Using %s override value=%d", desc, *override))
-}
-
-func ResolveBuildOptions(codeOpt *BuildOptions, envOpt *BuildOptions) BuildOptions {
+func ResolveBuildOptions(codeOpt *BuildOptions, envOpt *BuildOptions) *BuildOptions {
 	fromCode := BuildOptions{}
 	if codeOpt != nil {
 		fromCode = *codeOpt
@@ -315,47 +336,16 @@ func ResolveBuildOptions(codeOpt *BuildOptions, envOpt *BuildOptions) BuildOptio
 		fromEnv = *envOpt
 	}
 
-	return BuildOptions{
-		CgoEnabled:          util.CoalescePtr(fromCode.CgoEnabled, fromEnv.CgoEnabled),
-		Release:             util.CoalescePtr(fromCode.Release, fromEnv.Release),
-		Compress:            util.CoalescePtr(fromCode.Compress, fromEnv.Compress),
-		Platforms:           util.CoalescePtr(fromCode.Platforms, fromEnv.Platforms),
-		GoBuildTempRoot:     util.CoalescePtr(fromCode.GoBuildTempRoot, fromEnv.GoBuildTempRoot),
-		TaskConcurrency:     util.CoalescePtr(fromCode.TaskConcurrency, fromEnv.TaskConcurrency),
-		TaskGoMaxProcs:      util.CoalescePtr(fromCode.TaskGoMaxProcs, fromEnv.TaskGoMaxProcs),
-		BuildTaskMemBytes:   fromCode.BuildTaskMemBytes,
-		BuildThreadMemBytes: fromCode.BuildThreadMemBytes,
+	return &BuildOptions{
+		CgoEnabled:      util.CoalescePtr(fromCode.CgoEnabled, fromEnv.CgoEnabled),
+		Release:         util.CoalescePtr(fromCode.Release, fromEnv.Release),
+		Compress:        util.CoalescePtr(fromCode.Compress, fromEnv.Compress),
+		Platforms:       util.CoalescePtr(fromCode.Platforms, fromEnv.Platforms),
+		GoBuildTempRoot: util.CoalescePtr(fromCode.GoBuildTempRoot, fromEnv.GoBuildTempRoot),
+		TaskConcurrency: util.CoalescePtr(fromCode.TaskConcurrency, fromEnv.TaskConcurrency),
+		TaskGoMaxProcs:  util.CoalescePtr(fromCode.TaskGoMaxProcs, fromEnv.TaskGoMaxProcs),
+		MemOpt:          util.CoalescePtr(fromCode.MemOpt, fromEnv.MemOpt),
 	}
-}
-
-func boolOption(opt *bool) bool {
-	return opt != nil && *opt
-}
-
-func resolveEnvOption[T any](key string) *T {
-	value, err := util.GetEnv[T](key)
-	if err == nil {
-		return value
-	}
-	if errors.Is(err, util.ErrEnvNotSet) {
-		return nil
-	}
-	PrintYellow(fmt.Sprintf("Invalid env %s: %v", key, err))
-	return nil
-}
-
-func stringOption(opt *string) string {
-	if opt == nil {
-		return ""
-	}
-	return *opt
-}
-
-func platformsOption(opt *[]string) []string {
-	if opt == nil {
-		return nil
-	}
-	return *opt
 }
 
 func getBinaries(binaries []string) []string {

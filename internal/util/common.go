@@ -19,6 +19,14 @@ func CoalescePtr[T any](values ...*T) *T {
 	return nil
 }
 
+func NilAsZero[T any](opt *T) T {
+	var zero T
+	if opt == nil {
+		return zero
+	}
+	return *opt
+}
+
 func Clamp(v, minV, maxV int) int {
 	if v < minV {
 		return minV
