@@ -1,7 +1,6 @@
 package mageutil
 
 import (
-	"fmt"
 	"os"
 	"runtime"
 
@@ -27,14 +26,14 @@ type Config struct {
 func InitForSSC() {
 	yamlFile, err := os.ReadFile(StartConfigFile)
 	if err != nil {
-		fmt.Printf("error reading YAML file: %v", err)
+		PrintRed("error reading YAML file: " + err.Error())
 		os.Exit(1)
 	}
 
 	var config Config
 	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
-		fmt.Printf("error unmarshalling YAML: %v", err)
+		PrintRed("error unmarshalling YAML: " + err.Error())
 		os.Exit(1)
 	}
 

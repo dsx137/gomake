@@ -98,10 +98,10 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 		if os.IsNotExist(err) {
 			return nil
 		}
-		fmt.Printf("Failed read directory %s: %v\n", sourceDir, err)
+		PrintRed(fmt.Sprintf("Failed read directory %s: %v", sourceDir, err))
 		os.Exit(1)
 	} else if !info.IsDir() {
-		fmt.Printf("Failed %s is not dir\n", sourceDir)
+		PrintRed(fmt.Sprintf("Failed %s is not dir", sourceDir))
 		os.Exit(1)
 	}
 
@@ -109,7 +109,7 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 	outputDir := filepath.Join(outputBase, targetOS, targetArch)
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		fmt.Printf("Failed to create directory %s: %v\n", outputDir, err)
+		PrintRed(fmt.Sprintf("Failed to create directory %s: %v", outputDir, err))
 		os.Exit(1)
 	}
 
@@ -387,7 +387,7 @@ func resolveRequestedBinaries(binaries []string) []string {
 		}
 		PrintYellow(fmt.Sprintf("Binary %s not found in cmd (%s) or tools (%s) directories. Skipping...", binary, Paths.SrcDir, Paths.ToolsDir))
 	}
-	fmt.Println("Resolved binaries:", resolved)
+	PrintBlue(fmt.Sprintf("Resolved binaries: %v", resolved))
 	return resolved
 }
 

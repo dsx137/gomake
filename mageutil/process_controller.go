@@ -50,7 +50,7 @@ func StartBinaries(specificBinaries ...string) error {
 			}
 			args := []string{"-i", strconv.Itoa(i), "-c", configPath}
 			cmd := exec.Command(binFullPath, args...)
-			fmt.Printf("Starting %s\n", cmd.String())
+			PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
 			cmd.Dir = Paths.OutputHostBin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -91,7 +91,7 @@ func StartTools(specificTools ...string) error {
 		}
 
 		cmd := exec.Command(toolFullPath, "-c", configPath)
-		fmt.Printf("Starting %s\n", cmd.String())
+		PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
 		cmd.Dir = Paths.OutputHostBinTools
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -103,7 +103,7 @@ func StartTools(specificTools ...string) error {
 		if err := cmd.Wait(); err != nil {
 			return fmt.Errorf("failed to execute %s with exit code: %v", toolFullPath, err)
 		}
-		fmt.Printf("Starting %s successfully \n", cmd.String())
+		PrintGreen(fmt.Sprintf("Starting %s successfully", cmd.String()))
 	}
 	return nil
 }

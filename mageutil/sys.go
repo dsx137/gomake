@@ -86,26 +86,26 @@ func FindPIDsByBinaryPath() (map[string][]int, error) {
 func PrintBinaryPorts(binaryPath string, pidMap map[string][]int) {
 	pids, exists := pidMap[binaryPath]
 	if !exists || len(pids) == 0 {
-		fmt.Printf("No running processes found for binary: %s\n", binaryPath)
+		PrintYellow(fmt.Sprintf("No running processes found for binary: %s", binaryPath))
 		return
 	}
 
 	for _, pid := range pids {
 		proc, err := process.NewProcess(int32(pid))
 		if err != nil {
-			fmt.Printf("Failed to create process object for PID %d: %v\n", pid, err)
+			PrintYellow(fmt.Sprintf("Failed to create process object for PID %d: %v", pid, err))
 			continue
 		}
 
 		cmdline, err := proc.Cmdline()
 		if err != nil {
-			fmt.Printf("Failed to get command line for PID %d: %v\n", pid, err)
+			PrintYellow(fmt.Sprintf("Failed to get command line for PID %d: %v", pid, err))
 			continue
 		}
 
 		connections, err := net.ConnectionsPid("all", int32(pid))
 		if err != nil {
-			fmt.Printf("Error getting connections for PID %d: %v\n", pid, err)
+			PrintYellow(fmt.Sprintf("Error getting connections for PID %d: %v", pid, err))
 			continue
 		}
 
@@ -132,7 +132,7 @@ func PrintBinaryPorts(binaryPath string, pidMap map[string][]int) {
 func BatchKillExistBinaries(binaryPaths []string) {
 	processes, err := process.Processes()
 	if err != nil {
-		fmt.Printf("Failed to get processes: %v\n", err)
+		PrintRed(fmt.Sprintf("Failed to get processes: %v", err))
 		return
 	}
 
@@ -148,7 +148,7 @@ func BatchKillExistBinaries(binaryPaths []string) {
 
 	for _, binaryPath := range binaryPaths {
 		if procs, found := exePathMap[binaryPath]; found {
-			fmt.Println("binaryPath  found ", binaryPath)
+			PrintBlue(fmt.Sprintf("binaryPath found %s", binaryPath))
 			for _, p := range procs {
 				terminateAndKillProcess(p)
 			}
@@ -159,7 +159,7 @@ func BatchKillExistBinaries(binaryPaths []string) {
 func terminateAndKillProcess(p *process.Process) {
 	cmdline, err := p.Cmdline()
 	if err != nil {
-		fmt.Printf("Failed to get command line for process %d: %v\n", p.Pid, err)
+		PrintYellow(fmt.Sprintf("Failed to get command line for process %d: %v", p.Pid, err))
 		return
 	}
 
@@ -167,12 +167,12 @@ func terminateAndKillProcess(p *process.Process) {
 	if err != nil {
 		err = p.Kill() // Fallback to kill if terminate fails
 		if err != nil {
-			fmt.Printf("Failed to kill process cmdline: %s, pid: %d, err: %v\n", cmdline, p.Pid, err)
+			PrintRed(fmt.Sprintf("Failed to kill process cmdline: %s, pid: %d, err: %v", cmdline, p.Pid, err))
 		} else {
-			fmt.Printf("Killed process cmdline: %s, pid: %d\n", cmdline, p.Pid)
+			PrintYellow(fmt.Sprintf("Killed process cmdline: %s, pid: %d", cmdline, p.Pid))
 		}
 	} else {
-		fmt.Printf("Terminated process cmdline: %s, pid: %d\n", cmdline, p.Pid)
+		PrintGreen(fmt.Sprintf("Terminated process cmdline: %s, pid: %d", cmdline, p.Pid))
 	}
 }
 
@@ -180,7 +180,7 @@ func terminateAndKillProcess(p *process.Process) {
 func KillExistBinary(binaryPath string) {
 	processes, err := process.Processes()
 	if err != nil {
-		fmt.Printf("Failed to get processes: %v\n", err)
+		PrintRed(fmt.Sprintf("Failed to get processes: %v", err))
 		return
 	}
 
@@ -196,7 +196,7 @@ func KillExistBinary(binaryPath string) {
 			//if strings.EqualFold(exePath, binaryPath) {
 			cmdline, err := p.Cmdline()
 			if err != nil {
-				fmt.Printf("Failed to get command line for process %d: %v\n", p.Pid, err)
+				PrintYellow(fmt.Sprintf("Failed to get command line for process %d: %v", p.Pid, err))
 				continue
 			}
 
@@ -205,12 +205,12 @@ func KillExistBinary(binaryPath string) {
 
 				err = p.Kill()
 				if err != nil {
-					fmt.Printf("Failed to kill process cmdline: %s, pid: %d, err: %v\n", cmdline, p.Pid, err)
+					PrintRed(fmt.Sprintf("Failed to kill process cmdline: %s, pid: %d, err: %v", cmdline, p.Pid, err))
 				} else {
-					fmt.Printf("Killed process cmdline: %s, pid: %d\n", cmdline, p.Pid)
+					PrintYellow(fmt.Sprintf("Killed process cmdline: %s, pid: %d", cmdline, p.Pid))
 				}
 			} else {
-				fmt.Printf("Terminated process cmdline: %s, pid: %d\n", cmdline, p.Pid)
+				PrintGreen(fmt.Sprintf("Terminated process cmdline: %s, pid: %d", cmdline, p.Pid))
 			}
 		}
 	}
@@ -222,7 +222,7 @@ func DetectPlatform() string {
 	switch targetArch {
 	case "amd64", "arm64":
 	default:
-		fmt.Printf("Unsupported architecture: %s\n", targetArch)
+		PrintRed(fmt.Sprintf("Unsupported architecture: %s", targetArch))
 		os.Exit(1)
 	}
 	return fmt.Sprintf("%s_%s", targetOS, targetArch)
@@ -232,7 +232,7 @@ func DetectPlatform() string {
 func rootDir() string {
 	dir, err := os.Getwd()
 	if err != nil {
-		fmt.Println("Failed to get current directory:", err)
+		PrintRed(fmt.Sprintf("Failed to get current directory: %v", err))
 		os.Exit(1)
 	}
 	return dir
