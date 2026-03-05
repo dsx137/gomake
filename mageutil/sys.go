@@ -12,12 +12,12 @@ import (
 )
 
 func OsArch() string {
-	os := runtime.GOOS
+	goos := runtime.GOOS
 	arch := runtime.GOARCH
-	if os == "windows" {
-		return fmt.Sprintf("%s\\%s", os, arch)
+	if goos == "windows" {
+		return fmt.Sprintf("%s\\%s", goos, arch)
 	}
-	return fmt.Sprintf("%s/%s", os, arch)
+	return fmt.Sprintf("%s/%s", goos, arch)
 }
 
 // CheckProcessNames checks if the number of processes running that match the specified path equals the expected count.
