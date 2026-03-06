@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/openimsdk/gomake/internal/priority"
 	"github.com/openimsdk/gomake/internal/util"
 )
 
@@ -217,7 +218,11 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 				}
 				buildArgs = append(buildArgs, buildTarget)
 
-				err = RunWithPriority(PriorityLow, env, "go", buildArgs...)
+				err = NewCmd("go").
+					WithArgs(buildArgs...).
+					WithEnv(env).
+					WithPriority(priority.Low).
+					Run()
 
 				os.Chdir(originalDir)
 
@@ -230,7 +235,7 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 
 				if compressEnabled {
 					PrintBlue(fmt.Sprintf("Compressing %s with UPX...", outputFileName))
-					if err := RunWithPriority(PriorityLow, nil, "upx", "--lzma", outputPath); err != nil {
+					if err := NewCmd("upx").WithArgs("--lzma", outputPath).WithPriority(priority.Low).Run(); err != nil {
 						PrintYellow(fmt.Sprintf("UPX compression failed for %s (non-fatal): %v", outputFileName, err))
 					} else {
 						PrintGreen(fmt.Sprintf("Successfully compressed with UPX: %s", outputFileName))
